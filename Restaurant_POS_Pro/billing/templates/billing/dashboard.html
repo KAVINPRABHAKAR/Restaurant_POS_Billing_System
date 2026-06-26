@@ -1,0 +1,62 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid">
+    <h2 class="mb-4 fw-bold">Daily Sales Analytics</h2>
+    
+    <div class="row g-4 mb-4">
+        <div class="col-md-4">
+            <div class="card bg-primary text-white shadow-sm border-0">
+                <div class="card-body">
+                    <h6>Total Revenue</h6>
+                    <h3>₹{{ data.total_revenue }}</h3>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card bg-success text-white shadow-sm border-0">
+                <div class="card-body">
+                    <h6>Avg. Order Value</h6>
+                    <h3>₹{{ data.avg_order }}</h3>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-md-8">
+            <div class="card shadow-sm border-0 p-4">
+                <h5>Revenue Trend</h5>
+                <canvas id="revenueChart"></canvas>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card shadow-sm border-0 p-4">
+                <h5>Most Sold Items</h5>
+                <canvas id="itemChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+    // Revenue Trend Chart
+    new Chart(document.getElementById('revenueChart'), {
+        type: 'line',
+        data: {
+            labels: {{ data.trend_labels|safe }},
+            datasets: [{ label: 'Daily Sales', data: {{ data.trend_values|safe }}, borderColor: '#0d6efd', tension: 0.3 }]
+        }
+    });
+
+    // Top Items Chart
+    new Chart(document.getElementById('itemChart'), {
+        type: 'doughnut',
+        data: {
+            labels: {{ data.most_sold_labels|safe }},
+            datasets: [{ data: {{ data.most_sold_values|safe }}, backgroundColor: ['#0d6efd', '#198754', '#ffc107', '#dc3545', '#6c757d'] }]
+        }
+    });
+</script>
+{% endblock %}

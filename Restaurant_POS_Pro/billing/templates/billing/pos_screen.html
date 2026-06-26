@@ -1,0 +1,221 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    {% if last_order_id %}
+    <div class="alert alert-info d-flex justify-content-between align-items-center shadow-sm border-0 bg-primary text-white mb-4">
+        <span><i class="bi bi-check-circle-fill me-2"></i> <strong>Order Successful!</strong> Bill #{{ last_order_id }} processed & stock updated.</span>
+        <a href="{% url 'export_pdf' last_order_id %}" class="btn btn-light fw-bold">
+            <i class="bi bi-printer me-1"></i> PRINT RECEIPT
+        </a>
+    </div>
+    {% endif %}
+
+    <div class="row g-4">
+        <div class="col-lg-8">
+            <div class="card border-0 shadow-sm p-3 mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-4">
+                    <h4 class="fw-bold mb-0 text-dark">Digital Menu</h4>
+                    <div class="input-group w-50">
+                        <span class="input-group-text bg-white border-end-0"><i class="bi bi-search"></i></span>
+                        <input type="text" id="menuSearch" class="form-control border-start-0" placeholder="Search food items...">
+                    </div>
+                </div>
+
+                <div class="row g-3" id="menuGrid">
+                    {% for item in items %}
+                    <div class="col-md-4 menu-item-card" data-name="{{ item.name }}">
+                        <div class="card h-100 border-0 shadow-sm transition hover-shadow" style="border-radius: 15px; overflow: hidden;">
+                            <div class="card-body">
+                                <span class="badge bg-light text-secondary mb-2 border">{{ item.category.name }}</span>
+                                <h5 class="fw-bold text-dark">{{ item.name }}</h5>
+                                <p class="text-primary fs-5 fw-bold mb-3">₹{{ item.price }}</p>
+                                
+                                {% if item.stock > 0 %}
+                                <button class="btn btn-primary w-100 rounded-pill add-to-cart" 
+                                        data-id="{{ item.id }}" 
+                                        data-name="{{ item.name }}" 
+                                        data-price="{{ item.price }}"
+                                        data-stock="{{ item.stock }}">
+                                    <i class="bi bi-plus-circle me-1"></i> Add to Order
+                                </button>
+                                {% else %}
+                                <button class="btn btn-secondary w-100 rounded-pill disabled">Out of Stock</button>
+                                {% endif %}
+                            </div>
+                            <div class="card-footer bg-light border-0 text-muted small text-center">
+                                Available: <strong id="stock-display-{{ item.id }}">{{ item.stock }}</strong>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-4">
+            <div class="card border-0 shadow-lg sticky-top" style="top: 80px; border-radius: 15px;">
+                <div class="card-header bg-dark text-white py-3" style="border-radius: 15px 15px 0 0;">
+                    <h5 class="mb-0 fw-bold text-center">Checkout Summary</h5>
+                </div>
+                <div class="card-body">
+                    <form method="POST" id="orderForm" action="{% url 'pos_screen' %}">
+                        {% csrf_token %}
+                        <input type="hidden" name="discount_percentage" id="discountInput" value="0">
+                        <div id="hiddenInputsContainer"></div>
+
+                        <div id="cartList" class="mb-4" style="min-height: 150px; max-height: 300px; overflow-y: auto;">
+                            <div class="text-center text-muted mt-5">
+                                <i class="bi bi-cart3 fs-1 d-block mb-2"></i>
+                                <p>No items in cart</p>
+                            </div>
+                        </div>
+
+                        <div class="border-top pt-3">
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Subtotal</span>
+                                <span id="subtotalVal" class="fw-bold small">₹0.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Tax (GST 5%)</span>
+                                <span id="gstVal" class="text-danger small">₹0.00</span>
+                            </div>
+                            <div class="d-flex justify-content-between mb-2">
+                                <span class="text-muted small">Service (10%)</span>
+                                <span id="serviceVal" class="text-danger small">₹0.00</span>
+                            </div>
+                            
+                            <div class="d-flex justify-content-between align-items-center mb-4 p-3 rounded-3" style="background-color: #f8f9fa;">
+                                <h4 class="fw-bold mb-0">Total</h4>
+                                <h4 class="fw-bold text-success mb-0" id="totalVal">₹0.00</h4>
+                            </div>
+                            
+                            <button type="button" onclick="handleCheckoutFlow()" class="btn btn-success btn-lg w-100 fw-bold shadow-sm rounded-pill py-3">
+                                <i class="bi bi-check2-circle me-2"></i> CONFIRM & PAY
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    const cart = {};
+
+    // New logic: Triggers popups when Confirm & Pay is clicked
+    function handleCheckoutFlow() {
+        const keys = Object.keys(cart);
+        if (keys.length === 0) {
+            alert("Cart is empty!");
+            return;
+        }
+
+        let discount = 0;
+        // Step 1: Ask if they have a coupon
+        const hasCoupon = confirm("Do you have a coupon?");
+        
+        if (hasCoupon) {
+            // Step 2: If yes, ask for the percentage
+            const perc = prompt("Enter discount percentage (0-100):", "0");
+            discount = parseFloat(perc) || 0;
+            
+            if (discount < 0 || discount > 100) {
+                alert("Invalid percentage. Proceeding with 0% discount.");
+                discount = 0;
+            }
+        }
+
+        // Set the hidden field and build item inputs
+        document.getElementById('discountInput').value = discount;
+        const container = document.getElementById('hiddenInputsContainer');
+        container.innerHTML = '';
+        keys.forEach(id => {
+            container.innerHTML += `<input type="hidden" name="items[]" value="${id}">`;
+            container.innerHTML += `<input type="hidden" name="qty[]" value="${cart[id].qty}">`;
+        });
+
+        // Submit the form
+        document.getElementById('orderForm').submit();
+    }
+
+    // Add items to cart
+    document.querySelectorAll('.add-to-cart').forEach(btn => {
+        btn.addEventListener('click', () => {
+            const {id, name, price, stock} = btn.dataset;
+            const currentQty = cart[id] ? cart[id].qty : 0;
+
+            if (currentQty >= parseInt(stock)) {
+                alert(`Cannot add more. Only ${stock} items in stock.`);
+                return;
+            }
+
+            if (cart[id]) {
+                cart[id].qty++;
+            } else {
+                cart[id] = { name, price: parseFloat(price), qty: 1 };
+            }
+            renderCart();
+        });
+    });
+
+    // Remove items from cart
+    function removeFromCart(id) {
+        if (cart[id]) {
+            if (cart[id].qty > 1) {
+                cart[id].qty--;
+            } else {
+                delete cart[id];
+            }
+            renderCart();
+        }
+    }
+
+    // Update UI
+    function renderCart() {
+        const list = document.getElementById('cartList');
+        list.innerHTML = '';
+        let subtotal = 0;
+
+        const keys = Object.keys(cart);
+        if (keys.length === 0) {
+            list.innerHTML = `<div class="text-center text-muted mt-5"><i class="bi bi-cart3 fs-1 d-block mb-2"></i><p>No items in cart</p></div>`;
+        }
+
+        keys.forEach(id => {
+            const item = cart[id];
+            subtotal += item.price * item.qty;
+            list.innerHTML += `
+                <div class="d-flex justify-content-between align-items-center mb-2 p-2 border-bottom">
+                    <div class="flex-grow-1">
+                        <h6 class="mb-0 small fw-bold">${item.name}</h6>
+                        <small class="text-muted">₹${item.price} x ${item.qty}</small>
+                    </div>
+                    <div class="text-end">
+                        <div class="fw-bold text-dark small">₹${(item.price * item.qty).toFixed(2)}</div>
+                        <i class="bi bi-dash-circle text-danger cursor-pointer" onclick="removeFromCart('${id}')" style="cursor:pointer;"></i>
+                    </div>
+                </div>`;
+        });
+
+        // Live calculation display (Always shows Subtotal + GST + Service)
+        const gst = subtotal * 0.05;
+        const service = subtotal * 0.10;
+        const total = subtotal + gst + service;
+
+        document.getElementById('subtotalVal').innerText = `₹${subtotal.toFixed(2)}`;
+        document.getElementById('gstVal').innerText = `₹${gst.toFixed(2)}`;
+        document.getElementById('serviceVal').innerText = `₹${service.toFixed(2)}`;
+        document.getElementById('totalVal').innerText = `₹${total.toFixed(2)}`;
+    }
+
+    // Search bar functionality
+    document.getElementById('menuSearch').addEventListener('input', (e) => {
+        const term = e.target.value.toLowerCase();
+        document.querySelectorAll('.menu-item-card').forEach(card => {
+            card.classList.toggle('d-none', !card.dataset.name.toLowerCase().includes(term));
+        });
+    });
+</script>
+{% endblock %}
